@@ -13,31 +13,47 @@ weekly  ●●○○○○○○○○ 18% ⟳ jul 21, 12:00am
 
 ## Why
 
-Claude Code ships a `statusline.sh` script (JSON piped over stdin, `jq`
-parsing, polling Anthropic's usage API, shelling out to `git`). pi extensions
-run in-process with typed access to session/model state, so this is a
-native TypeScript reimplementation — no subprocess/JSON boundary needed for
-model, context, and token/cost info. The plan rate-limit bars still call
-Anthropic's OAuth usage endpoint (the same one `statusline.sh` uses) since
-that data isn't otherwise exposed to pi.
+pi extensions run in-process with typed access to session/model state, so
+most of this (model, context usage, git branch, tokens, cost) is read
+directly from pi's APIs — no shell scripting, JSON parsing, or polling
+required. The plan rate-limit bars are the one exception: that data isn't
+exposed by pi itself, so it's fetched directly from Anthropic's OAuth usage
+endpoint using your local Claude Code credentials (see below).
 
 ## Install
 
-Copy (or symlink) `statusline.ts` into pi's extension auto-discovery path:
+**One-liner** (no clone needed):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jordanjkelly12/pi-statusline/main/install.sh | bash
+```
+
+Installs to `~/.pi/agent/extensions/statusline.ts` (global, all projects).
+
+**Project-local** (only for the current repo):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jordanjkelly12/pi-statusline/main/install.sh | bash -s -- --project
+```
+
+**From a clone:**
+
+```bash
+git clone https://github.com/jordanjkelly12/pi-statusline.git
+cd pi-statusline
+./install.sh              # global install
+./install.sh --project    # project-local install
+./install.sh --uninstall  # remove global install
+```
+
+**Manual install** — just copy the file yourself:
 
 ```bash
 mkdir -p ~/.pi/agent/extensions
 cp statusline.ts ~/.pi/agent/extensions/statusline.ts
 ```
 
-Project-local install (only for that repo):
-
-```bash
-mkdir -p .pi/extensions
-cp statusline.ts .pi/extensions/statusline.ts
-```
-
-Reload with `/reload` inside pi, or just start a new session.
+After installing, run `/reload` inside pi (or start a new session) to activate it.
 
 ## What it shows
 
@@ -53,18 +69,18 @@ Reload with `/reload` inside pi, or just start a new session.
 | Token/cost stats | summed from `ctx.sessionManager.getBranch()` |
 
 **Lines 2-3 (optional)** — Claude account plan usage, fetched from
-`https://api.anthropic.com/api/oauth/usage` using the same OAuth token
-lookup order as `statusline.sh`:
+`https://api.anthropic.com/api/oauth/usage` using a Claude Code OAuth token,
+looked up in this order:
 
 1. `CLAUDE_CODE_OAUTH_TOKEN` env var
 2. macOS Keychain (`security find-generic-password -s "Claude Code-credentials" -w`)
 3. `~/.claude/.credentials.json`
 4. `secret-tool` (Linux)
 
-Results are cached in `/tmp/claude/statusline-usage-cache.json` (60s TTL) —
-the same cache file `statusline.sh` uses, so both tools can share one fetch
-instead of double-polling the rate-limit endpoint. If no token is found,
-these lines are simply omitted.
+This is the same credential Claude Code itself uses, so if you have Claude
+Code installed and logged in, no extra setup is needed. Results are cached
+in `/tmp/claude/statusline-usage-cache.json` (60s TTL) so it isn't fetched
+on every render. If no token is found, these lines are simply omitted.
 
 **Line 4 (optional)** — "extra usage" / overage credits, shown only if
 enabled on the account.
